@@ -12,7 +12,7 @@ from kmd_nexus_client import NexusClientManager
 
 tracker: Tracker = None
 nexus: NexusClientManager = None
-regler: list = []
+potentielle_organisationer: list = []
 proces_navn = "Visitering til Lysningen"
 
 async def populate_queue(workqueue: Workqueue):
@@ -88,7 +88,7 @@ if __name__ == "__main__":
     elif not is_windows_path(args.excel_file):
         raise FileNotFoundError(f"Excel file not found: {args.excel_file}")
 
-    regler = get_excel_mapping().get("Liste", [])
+    potentielle_organisationer = get_excel_mapping().get("Liste", [])
     # Queue management
     if "--queue" in sys.argv:
         workqueue.clear_workqueue(WorkItemStatus.NEW)
