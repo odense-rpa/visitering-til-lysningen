@@ -1,2 +1,6 @@
 .venv
 .env
+input/
+test*
+*.pdf
+certifikater/
