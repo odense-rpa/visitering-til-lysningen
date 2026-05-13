@@ -23,6 +23,88 @@ potentielle_organisationer: list = []
 proces_navn = "Visitering til Lysningen"
 
 
+def _opret_opgaver(
+    skema, borgers_orgs, potentielle_organisationer, aktivitets_emne, borger_bevilliget
+):
+    borgers_opgave = nexus.opgaver.hent_opgaver(skema)
+    matchende_orgs = [
+        org
+        for org in borgers_orgs
+        if org.get("organization", {}).get("name") in potentielle_organisationer
+    ]
+    for org in matchende_orgs:
+        if any(
+            opgave
+            for opgave in borgers_opgave
+            if org.get("organization", {}).get("name")
+            == opgave.get("organizationAssignee", {}).get("displayName", "")
+            and opgave["startDate"] == datetime.date.today().isoformat()
+        ):
+            continue
+        opgave = nexus.opgaver.opret_opgave(
+            objekt=skema,
+            opgave_type=aktivitets_emne,
+            titel=aktivitets_emne,
+            ansvarlig_organisation=org["organization"]["name"],
+            start_dato=datetime.date.today(),
+            forfald_dato=datetime.date.today(),
+            beskrivelse=aktivitets_emne,
+        )
+        if not opgave:
+            raise WorkItemError(
+                f"Kunne ikke oprette opgave i organisation {org['organization']['name']}"
+            )
+    if borger_bevilliget:
+        opgave = nexus.opgaver.opret_opgave(
+            objekt=skema,
+            opgave_type=aktivitets_emne,
+            titel=aktivitets_emne,
+            ansvarlig_organisation="Myndighed Sygeplejerådgivere",
+            start_dato=datetime.date.today(),
+            forfald_dato=datetime.date.today(),
+            beskrivelse=aktivitets_emne,
+        )
+        if not opgave:
+            raise WorkItemError(
+                "Kunne ikke oprette opgave i organisation Myndighed Sygeplejerådgivere"
+            )
+
+
+def _tilføj_borger_til_organisationer(borger, organisationskatalog):
+    borgers_orgs = nexus.organisationer.hent_organisationer_for_borger(borger)
+    for org_navn in organisationskatalog:
+        if any(org.get("organization").get("name") == org_navn for org in borgers_orgs):
+            continue
+        org = nexus.organisationer.hent_organisation_ved_navn(org_navn)
+        nexus.organisationer.tilføj_borger_til_organisation(borger, org)
+    return nexus.organisationer.hent_organisationer_for_borger(borger)
+
+
+def _hent_skema_og_bevillingsindsats(borger, cpr):
+    skemareferencer = nexus.skemaer.hent_skemareferencer(borger=borger)
+    skemareferencer = [
+        s
+        for s in skemareferencer
+        if s.get("Navn")
+        == "Indstilling og afgørelse til midlertidigt ophold på Lysningen - Servicelov"
+        or s.get("Navn")
+        == "Indstilling og afgørelse til midlertidigt ophold på Lysningen - Ældrelov"
+    ]
+    if not skemareferencer:
+        raise WorkItemError(
+            f"Borger med CPR {cpr[-4:]} har ingen relevante skemareferencer"
+        )
+    skemareference = max(skemareferencer, key=lambda s: s["Dato"])
+    skema = nexus.skemaer.hent_skema_fra_reference(skemareference)
+    bevillingsindsats = next(
+        c
+        for item in skema["items"]
+        for c in item.get("children", [])
+        if c.get("label") == "Bevillingsindsats"
+    )["value"]["name"]
+    return skema, bevillingsindsats
+
+
 def _hent_opgaver(org_navn, beskrivelse_filter, navn_filter=None):
     org = nexus.organisationer.hent_organisation_ved_navn(org_navn)
     aktivitetsliste = nexus.aktivitetslister.hent_aktivitetsliste(
@@ -81,81 +163,37 @@ async def process_workqueue(workqueue: Workqueue):
     for item in workqueue:
         with item:
             data = item.data  # Item data deserialized from json as dict
+            borger_bevilliget = True
+            if data["aktivitets_emne"] != "BEVILGET - Midlertidigt ophold på Lysningen":
+                borger_bevilliget = False
             bevillingsindsats = ""
 
             try:
                 borger = nexus.borgere.hent_borger(data["cpr"])
-                skemareferencer = nexus.skemaer.hent_skemareferencer(borger=borger)
-                skemareferencer = [
-                    s
-                    for s in skemareferencer
-                    if s.get("Navn")
-                    == "Indstilling og afgørelse til midlertidigt ophold på Lysningen - Servicelov"
-                    or s.get("Navn")
-                    == "Indstilling og afgørelse til midlertidigt ophold på Lysningen - Ældrelov"
-                ]
-                if not skemareferencer:
-                    raise WorkItemError(
-                        f"Borger med CPR {data['cpr']} har ingen relevante skemareferencer"
-                    )
-                # Finder det nyeste skemareference baseret på "Dato" feltet
-                skemareference = max(skemareferencer, key=lambda s: s["Dato"])
-                skema = nexus.skemaer.hent_skema_fra_reference(skemareference)
-                bevillingsindsats = next(
-                    c
-                    for item in skema["items"]
-                    for c in item.get("children", [])
-                    if c.get("label") == "Bevillingsindsats"
-                )["value"]["name"]
+                skema, bevillingsindsats = _hent_skema_og_bevillingsindsats(
+                    borger, data["cpr"]
+                )
 
                 # Tilføjer borger til 3 bestemt orgs.
-                borgers_orgs = nexus.organisationer.hent_organisationer_for_borger(
-                    borger
-                )
-                for org_navn in organisationskatalog:
-                    if any(
-                        org.get("organization").get("name") == org_navn
-                        for org in borgers_orgs
-                    ):
-                        continue
-                    org = nexus.organisationer.hent_organisation_ved_navn(org_navn)
-                    nexus.organisationer.tilføj_borger_til_organisation(borger, org)
-
-                borgers_orgs = nexus.organisationer.hent_organisationer_for_borger(
-                    borger
-                )
+                if borger_bevilliget:
+                    borgers_orgs = _tilføj_borger_til_organisationer(
+                        borger, organisationskatalog
+                    )
+                else:
+                    borgers_orgs = nexus.organisationer.hent_organisationer_for_borger(
+                        borger
+                    )
 
                 # finder et match mellem borgers orgs og potentielle orgs og tjekker om der allerede er en opgave for borger i den organisation med samme startdato som i dag, hvis ikke så oprettes en opgave for hver matchende org
-                borgers_opgave = nexus.opgaver.hent_opgaver(skema)
-                matchende_orgs = [
-                    org
-                    for org in borgers_orgs
-                    if org.get("organization", {}).get("name")
-                    in potentielle_organisationer
-                ]
-                for org in matchende_orgs:
-                    if any(
-                        opgave
-                        for opgave in borgers_opgave
-                        if org.get("organization", {}).get("name")
-                        in opgave.get("organizationAssignee", {}).get("displayName", "")
-                        and opgave["startDate"] == datetime.date.today().isoformat()
-                    ):
-                        continue
-                    nexus.opgaver.opret_opgave(
-                        objekt=skema,
-                        opgave_type=data["aktivitets_emne"],
-                        titel=data["aktivitets_emne"],
-                        ansvarlig_organisation=org["organization"]["name"],
-                        start_dato=datetime.date.today(),
-                        forfald_dato=datetime.date.today(),
-                        beskrivelse=data["aktivitets_emne"],
-                    )
-                    print("hej")
-
-                print(
-                    f"Borger med CPR {data['cpr']} har {len(skemareferencer)} relevante skemareferencer, bruger nyeste fra {skemareference['Dato']}"
+                _opret_opgaver(
+                    skema,
+                    borgers_orgs,
+                    potentielle_organisationer,
+                    data["aktivitets_emne"],
+                    borger_bevilliget,
                 )
+
+                print("hej")
 
             except WorkItemError as e:
                 # A WorkItemError represents a soft error that indicates the item should be passed to manual processing or a business logic fault
