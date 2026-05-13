@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import logging
 import sys
 import argparse
@@ -71,13 +72,19 @@ async def process_workqueue(workqueue: Workqueue):
     logger = logging.getLogger(__name__)
 
     logger.info("Hello from process workqueue!")
+    organisationskatalog = [
+        "Økonomi og Effekt, midlertidige pladser",
+        "Lysningen",
+        "Myndighed Lysningen"
+    ]
 
     for item in workqueue:
         with item:
             data = item.data  # Item data deserialized from json as dict
+            bevillingsindsats = ""
 
             try:
-                borger = nexus.borgere.hent_borger(cpr=data["cpr"])
+                borger = nexus.borgere.hent_borger(data["cpr"])
                 skemareferencer = nexus.skemaer.hent_skemareferencer(borger=borger)
                 skemareferencer = [
                     s
@@ -91,6 +98,55 @@ async def process_workqueue(workqueue: Workqueue):
                     raise WorkItemError(
                         f"Borger med CPR {data['cpr']} har ingen relevante skemareferencer"
                     )
+                # Finder det nyeste skemareference baseret på "Dato" feltet
+                skemareference = max(skemareferencer, key=lambda s: s["Dato"])
+                skema = nexus.skemaer.hent_skema_fra_reference(skemareference)
+                bevillingsindsats = next(
+                    c for item in skema["items"] for c in item.get("children", [])
+                    if c.get("label") == "Bevillingsindsats"
+                )["value"]["name"]
+
+                # Tilføjer borger til 3 bestemt orgs.
+                borgers_orgs = nexus.organisationer.hent_organisationer_for_borger(borger)
+                for org_navn in organisationskatalog:
+                    if any(org.get("organization").get("name") == org_navn for org in borgers_orgs):
+                        continue
+                    org = nexus.organisationer.hent_organisation_ved_navn(org_navn)
+                    nexus.organisationer.tilføj_borger_til_organisation(borger, org)
+
+                borgers_orgs = nexus.organisationer.hent_organisationer_for_borger(borger)
+
+                # finder et match mellem borgers orgs og potentielle orgs og tjekker om der allerede er en opgave for borger i den organisation med samme startdato som i dag, hvis ikke så oprettes en opgave for hver matchende org
+                borgers_opgave = nexus.opgaver.hent_opgaver(skema)
+                matchende_orgs = [
+                    org
+                    for org in borgers_orgs
+                    if org.get("organization", {}).get("name") in potentielle_organisationer
+                ]
+                for org in matchende_orgs:
+                    if any(
+                        opgave
+                        for opgave in borgers_opgave
+                        if org.get("organization", {}).get("name") in opgave.get("organizationAssignee", {}).get("displayName", "")
+                        and 
+                        opgave["startDate"] == datetime.date.today().isoformat()
+                    ):
+                        continue
+                    nexus.opgaver.opret_opgave(
+                        objekt=skema,
+                        opgave_type=data["aktivitets_emne"],
+                        titel=data["aktivitets_emne"],
+                        ansvarlig_organisation=org["organization"]["name"],
+                        start_dato=datetime.date.today(),
+                        forfald_dato=datetime.date.today(),
+                        beskrivelse=data["aktivitets_emne"],
+                    )
+                    print("hej")
+
+
+
+
+                print(f"Borger med CPR {data['cpr']} har {len(skemareferencer)} relevante skemareferencer, bruger nyeste fra {skemareference['Dato']}")
 
             except WorkItemError as e:
                 # A WorkItemError represents a soft error that indicates the item should be passed to manual processing or a business logic fault
@@ -147,7 +203,10 @@ if __name__ == "__main__":
     elif not is_windows_path(args.excel_file):
         raise FileNotFoundError(f"Excel file not found: {args.excel_file}")
 
-    potentielle_organisationer = get_excel_mapping().get("Liste", [])
+    potentielle_organisationer = [
+        row["Organisationer som muligvis skal have besked ved visitering til Lysningen"]
+        for row in get_excel_mapping().get("Liste", [])
+    ]
     # Queue management
     if "--queue" in sys.argv:
         workqueue.clear_workqueue(WorkItemStatus.NEW)
