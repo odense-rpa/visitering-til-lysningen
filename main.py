@@ -75,7 +75,7 @@ async def process_workqueue(workqueue: Workqueue):
     organisationskatalog = [
         "Økonomi og Effekt, midlertidige pladser",
         "Lysningen",
-        "Myndighed Lysningen"
+        "Myndighed Lysningen",
     ]
 
     for item in workqueue:
@@ -102,34 +102,44 @@ async def process_workqueue(workqueue: Workqueue):
                 skemareference = max(skemareferencer, key=lambda s: s["Dato"])
                 skema = nexus.skemaer.hent_skema_fra_reference(skemareference)
                 bevillingsindsats = next(
-                    c for item in skema["items"] for c in item.get("children", [])
+                    c
+                    for item in skema["items"]
+                    for c in item.get("children", [])
                     if c.get("label") == "Bevillingsindsats"
                 )["value"]["name"]
 
                 # Tilføjer borger til 3 bestemt orgs.
-                borgers_orgs = nexus.organisationer.hent_organisationer_for_borger(borger)
+                borgers_orgs = nexus.organisationer.hent_organisationer_for_borger(
+                    borger
+                )
                 for org_navn in organisationskatalog:
-                    if any(org.get("organization").get("name") == org_navn for org in borgers_orgs):
+                    if any(
+                        org.get("organization").get("name") == org_navn
+                        for org in borgers_orgs
+                    ):
                         continue
                     org = nexus.organisationer.hent_organisation_ved_navn(org_navn)
                     nexus.organisationer.tilføj_borger_til_organisation(borger, org)
 
-                borgers_orgs = nexus.organisationer.hent_organisationer_for_borger(borger)
+                borgers_orgs = nexus.organisationer.hent_organisationer_for_borger(
+                    borger
+                )
 
                 # finder et match mellem borgers orgs og potentielle orgs og tjekker om der allerede er en opgave for borger i den organisation med samme startdato som i dag, hvis ikke så oprettes en opgave for hver matchende org
                 borgers_opgave = nexus.opgaver.hent_opgaver(skema)
                 matchende_orgs = [
                     org
                     for org in borgers_orgs
-                    if org.get("organization", {}).get("name") in potentielle_organisationer
+                    if org.get("organization", {}).get("name")
+                    in potentielle_organisationer
                 ]
                 for org in matchende_orgs:
                     if any(
                         opgave
                         for opgave in borgers_opgave
-                        if org.get("organization", {}).get("name") in opgave.get("organizationAssignee", {}).get("displayName", "")
-                        and 
-                        opgave["startDate"] == datetime.date.today().isoformat()
+                        if org.get("organization", {}).get("name")
+                        in opgave.get("organizationAssignee", {}).get("displayName", "")
+                        and opgave["startDate"] == datetime.date.today().isoformat()
                     ):
                         continue
                     nexus.opgaver.opret_opgave(
@@ -143,10 +153,9 @@ async def process_workqueue(workqueue: Workqueue):
                     )
                     print("hej")
 
-
-
-
-                print(f"Borger med CPR {data['cpr']} har {len(skemareferencer)} relevante skemareferencer, bruger nyeste fra {skemareference['Dato']}")
+                print(
+                    f"Borger med CPR {data['cpr']} har {len(skemareferencer)} relevante skemareferencer, bruger nyeste fra {skemareference['Dato']}"
+                )
 
             except WorkItemError as e:
                 # A WorkItemError represents a soft error that indicates the item should be passed to manual processing or a business logic fault
