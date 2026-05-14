@@ -15,6 +15,7 @@ from automation_server_client import (
 
 from odk_tools.tracking import Tracker
 from process.config import load_excel_mapping, get_excel_mapping
+from process.forløb import forløb
 from kmd_nexus_client import NexusClientManager
 
 tracker: Tracker = None
@@ -185,13 +186,24 @@ async def process_workqueue(workqueue: Workqueue):
                     )
 
                 # finder et match mellem borgers orgs og potentielle orgs og tjekker om der allerede er en opgave for borger i den organisation med samme startdato som i dag, hvis ikke så oprettes en opgave for hver matchende org
-                _opret_opgaver(
-                    skema,
-                    borgers_orgs,
-                    potentielle_organisationer,
-                    data["aktivitets_emne"],
-                    borger_bevilliget,
-                )
+                # _opret_opgaver(
+                #     skema,
+                #     borgers_orgs,
+                #     potentielle_organisationer,
+                #     data["aktivitets_emne"],
+                #     borger_bevilliget,
+                # )
+
+                # tilføjer forløb til borger
+                if borger_bevilliget:
+                    skemanavn = skema["formDefinition"]["title"]
+                    relevante_forløb = [f for f in forløb if f["Skemanavn"] == skemanavn]
+                    for f in relevante_forløb:
+                        nexus.forløb.opret_forløb(
+                            borger=borger,
+                            grundforløb_navn=f["Grundforløb"],
+                            forløb_navn=f["Forløb"],
+                        )
 
                 print("hej")
 
