@@ -160,10 +160,25 @@ def _tilføj_indsatser(borger, skema, bevillingsindsats):
 
     if not _er_ÆL_indsats(bevillingsindsats):
         i_dag = datetime.date.today()
-        opstarts_felter = {k: i_dag for k in ("workflowApprovedDate", "billingStartDate", "entryDate", "orderedDate", "workflowRequestedDate")}
+        opstarts_felter = {
+            k: i_dag
+            for k in (
+                "workflowApprovedDate",
+                "billingStartDate",
+                "entryDate",
+                "orderedDate",
+                "workflowRequestedDate",
+            )
+        }
         for indsats_navn, check_navn in [
-            ("Dag - opstartsindsatser SEL § 83 a",   "Dag - Indtagelse af mad og drikke (tidsafgrænset rehabiliteringsforløb)"),
-            ("Aften - opstartsindsatser SEL § 83 a", "Aften - Indtagelse af mad og drikke (tidsafgrænset rehabiliteringsforløb)"),
+            (
+                "Dag - opstartsindsatser SEL § 83 a",
+                "Dag - Indtagelse af mad og drikke (tidsafgrænset rehabiliteringsforløb)",
+            ),
+            (
+                "Aften - opstartsindsatser SEL § 83 a",
+                "Aften - Indtagelse af mad og drikke (tidsafgrænset rehabiliteringsforløb)",
+            ),
         ]:
             if not any(i for i in filtrerede if i["name"] == check_navn):
                 nexus.indsatser.opret_indsats(
@@ -177,15 +192,27 @@ def _tilføj_indsatser(borger, skema, bevillingsindsats):
                 )
 
     allerede_bevilliget = next(
-        (i for i in filtrerede if i["name"] == bevillingsindsats and i["workflowState"]["name"] == "Bevilliget"),
+        (
+            i
+            for i in filtrerede
+            if i["name"] == bevillingsindsats
+            and i["workflowState"]["name"] == "Bevilliget"
+        ),
         None,
     )
     if not allerede_bevilliget:
         skemanavn = skema["formDefinition"]["title"]
-        relevant_forløb = next((f for f in forløb_til_indsats if f["Skemanavn"] == skemanavn), None)
+        relevant_forløb = next(
+            (f for f in forløb_til_indsats if f["Skemanavn"] == skemanavn), None
+        )
         if relevant_forløb:
             nu = datetime.datetime.now()
-            felter = {"approvedDate": nu, "requestedDate": nu, "entryDate": nu, "requestedMovingDate": nu}
+            felter = {
+                "approvedDate": nu,
+                "requestedDate": nu,
+                "entryDate": nu,
+                "requestedMovingDate": nu,
+            }
             if bevillingsindsats in (
                 "Midlertidigt ophold Lysningen - Borger aflastning pårørende",
                 "Midlertidigt ophold Lysningen - Borger aflastning pårørende - ÆL § 16",
@@ -283,7 +310,7 @@ async def process_workqueue(workqueue: Workqueue):
 
                 if not borger_bevilliget:
                     _luk_afvist_opgave(data["aktivitets_id"])
-                
+
                 tracker.track_task(process_name=proces_navn)
 
             except WorkItemError as e:
