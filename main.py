@@ -283,6 +283,8 @@ async def process_workqueue(workqueue: Workqueue):
 
                 if not borger_bevilliget:
                     _luk_afvist_opgave(data["aktivitets_id"])
+                
+                tracker.track_task(process_name=proces_navn)
 
             except WorkItemError as e:
                 # A WorkItemError represents a soft error that indicates the item should be passed to manual processing or a business logic fault
