@@ -141,6 +141,14 @@ def _hent_opgaver(org_navn, beskrivelse_filter, navn_filter=None):
     ]
 
 
+def _luk_afvist_opgave(aktivitets_id):
+    org = nexus.organisationer.hent_organisation_ved_navn("Robot afvist Lysningen")
+    opgaver = nexus.opgaver.hent_opgaver(org)
+    opgave = next((o for o in opgaver if o["id"] == aktivitets_id), None)
+    if opgave:
+        nexus.opgaver.luk_opgave(opgave["id"])
+
+
 def _tilføj_indsatser(borger, skema, bevillingsindsats):
     pathway = nexus.borgere.hent_visning(borger)
     borgers_indsatsreferencer = nexus.borgere.hent_referencer(pathway)
@@ -274,6 +282,9 @@ async def process_workqueue(workqueue: Workqueue):
                 # tilføjer indsatser til borger
                 if borger_bevilliget:
                     _tilføj_indsatser(borger, skema, bevillingsindsats)
+
+                if not borger_bevilliget:
+                    _luk_afvist_opgave(data["aktivitets_id"])
 
             except WorkItemError as e:
                 # A WorkItemError represents a soft error that indicates the item should be passed to manual processing or a business logic fault
