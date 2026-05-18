@@ -225,8 +225,6 @@ async def populate_queue(workqueue: Workqueue):
             "aktivitets_id": opgave["id"],
             "cpr": cpr,
             "aktivitets_emne": opgave["name"],
-            "aktivitets_besked": opgave["description"],
-            "aktivitets_status": opgave["status"],
             "aktivitets_dato": opgave["creationDate"],
         }
         workqueue.add_item(data=data, reference=cpr)
