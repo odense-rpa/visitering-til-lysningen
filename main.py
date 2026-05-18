@@ -15,8 +15,9 @@ from automation_server_client import (
 
 from odk_tools.tracking import Tracker
 from process.config import load_excel_mapping, get_excel_mapping
-from process.forløb import forløb
+from process.forløb import forløb, forløb_til_indsats
 from kmd_nexus_client import NexusClientManager
+from kmd_nexus_client.tree_helpers import filter_by_path
 
 tracker: Tracker = None
 nexus: NexusClientManager = None
@@ -71,6 +72,25 @@ def _opret_opgaver(
             )
 
 
+def _er_ÆL_indsats(bevillingsindsats):
+    return bevillingsindsats in (
+        "Midlertidigt ophold Lysningen - Borger fra hjemmet - ÆL § 17",
+        "Midlertidigt ophold Lysningen - Borger fra sygehuset - ÆL § 17",
+        "Midlertidigt ophold Lysningen - Borger aflastning pårørende - ÆL § 16",
+    )
+
+
+def _tilføj_forløb(borger, skema):
+    skemanavn = skema["formDefinition"]["title"]
+    relevante_forløb = [f for f in forløb if f["Skemanavn"] == skemanavn]
+    for f in relevante_forløb:
+        nexus.forløb.opret_forløb(
+            borger=borger,
+            grundforløb_navn=f["Grundforløb"],
+            forløb_navn=f["Forløb"],
+        )
+
+
 def _tilføj_borger_til_organisationer(borger, organisationskatalog):
     borgers_orgs = nexus.organisationer.hent_organisationer_for_borger(borger)
     for org_navn in organisationskatalog:
@@ -119,6 +139,59 @@ def _hent_opgaver(org_navn, beskrivelse_filter, navn_filter=None):
         if beskrivelse_filter in o.get("description", "")
         and (navn_filter is None or navn_filter in o.get("name", ""))
     ]
+
+
+def _tilføj_indsatser(borger, skema, bevillingsindsats):
+    pathway = nexus.borgere.hent_visning(borger)
+    borgers_indsatsreferencer = nexus.borgere.hent_referencer(pathway)
+    filtrerede = filter_by_path(
+        borgers_indsatsreferencer,
+        path_pattern="/Ældre og sundhedsfagligt grundforløb/*/Indsatser/*",
+        active_pathways_only=False,
+    )
+
+    if not _er_ÆL_indsats(bevillingsindsats):
+        i_dag = datetime.date.today()
+        opstarts_felter = {k: i_dag for k in ("workflowApprovedDate", "billingStartDate", "entryDate", "orderedDate", "workflowRequestedDate")}
+        for indsats_navn, check_navn in [
+            ("Dag - opstartsindsatser SEL § 83 a",   "Dag - Indtagelse af mad og drikke (tidsafgrænset rehabiliteringsforløb)"),
+            ("Aften - opstartsindsatser SEL § 83 a", "Aften - Indtagelse af mad og drikke (tidsafgrænset rehabiliteringsforløb)"),
+        ]:
+            if not any(i for i in filtrerede if i["name"] == check_navn):
+                nexus.indsatser.opret_indsats(
+                    borger=borger,
+                    grundforløb="Ældre og sundhedsfagligt grundforløb",
+                    forløb="Sag SOFF: Pleje, omsorg og træning",
+                    felter=opstarts_felter,
+                    leverandør="Lysningen",
+                    oprettelsesform="Ansøg, Bevilg, Bestil",
+                    indsats=indsats_navn,
+                )
+
+    allerede_bevilliget = next(
+        (i for i in filtrerede if i["name"] == bevillingsindsats and i["workflowState"]["name"] == "Bevilliget"),
+        None,
+    )
+    if not allerede_bevilliget:
+        skemanavn = skema["formDefinition"]["title"]
+        relevant_forløb = next((f for f in forløb_til_indsats if f["Skemanavn"] == skemanavn), None)
+        if relevant_forløb:
+            nu = datetime.datetime.now()
+            felter = {"approvedDate": nu, "requestedDate": nu, "entryDate": nu, "requestedMovingDate": nu}
+            if bevillingsindsats in (
+                "Midlertidigt ophold Lysningen - Borger aflastning pårørende",
+                "Midlertidigt ophold Lysningen - Borger aflastning pårørende - ÆL § 16",
+            ):
+                felter |= {"waitingListType": "NOT_RELEVANT", "priority": "ACUTE"}
+            nexus.indsatser.opret_indsats(
+                borger=borger,
+                grundforløb="Ældre og sundhedsfagligt grundforløb",
+                forløb=relevant_forløb["Forløb"],
+                indsats=bevillingsindsats,
+                felter=felter,
+                leverandør="",
+                oprettelsesform="Ansøg, Bevilg",
+            )
 
 
 async def populate_queue(workqueue: Workqueue):
@@ -195,17 +268,12 @@ async def process_workqueue(workqueue: Workqueue):
                 # )
 
                 # tilføjer forløb til borger
-                if borger_bevilliget:
-                    skemanavn = skema["formDefinition"]["title"]
-                    relevante_forløb = [f for f in forløb if f["Skemanavn"] == skemanavn]
-                    for f in relevante_forløb:
-                        nexus.forløb.opret_forløb(
-                            borger=borger,
-                            grundforløb_navn=f["Grundforløb"],
-                            forløb_navn=f["Forløb"],
-                        )
+                # if borger_bevilliget:
+                #     _tilføj_forløb(borger, skema)
 
-                print("hej")
+                # tilføjer indsatser til borger
+                if borger_bevilliget:
+                    _tilføj_indsatser(borger, skema, bevillingsindsats)
 
             except WorkItemError as e:
                 # A WorkItemError represents a soft error that indicates the item should be passed to manual processing or a business logic fault
