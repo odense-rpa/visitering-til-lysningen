@@ -270,10 +270,9 @@ async def process_workqueue(workqueue: Workqueue):
     for item in workqueue:
         with item:
             data = item.data  # Item data deserialized from json as dict
-            borger_bevilliget = True
-            if data["aktivitets_emne"] != "BEVILGET - Midlertidigt ophold på Lysningen":
-                borger_bevilliget = False
-            bevillingsindsats = ""
+            borger_bevilliget = (
+                data["aktivitets_emne"] == "BEVILGET - Midlertidigt ophold på Lysningen"
+            )
 
             try:
                 borger = nexus.borgere.hent_borger(data["cpr"])
@@ -325,7 +324,6 @@ if __name__ == "__main__":
 
     # Initialize external systems for automation here..
     tracking_credential = Credential.get_credential("Odense SQL Server")
-    roboa_credential = Credential.get_credential("RoboA")  # bruges til at hente emails
     nexus_credential = Credential.get_credential("KMD Nexus - produktion")
 
     tracker = Tracker(
