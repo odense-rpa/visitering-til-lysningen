@@ -3,6 +3,7 @@ import logging
 import sys
 import argparse
 import os
+from datetime import datetime, timedelta
 
 from automation_server_client import (
     AutomationServer,
@@ -50,8 +51,15 @@ async def populate_queue(workqueue: Workqueue):
 
     for opgave in opgaver + opgaver_afvist:
         cpr = opgave["patients"][0]["patientIdentifier"]["identifier"]
-        test = workqueue.get_item_by_reference(cpr)
-        # TODO: find ud hvordan vi tjekker om CPR er i køen indenfor 2 dage med bevilget - hvis ja så skip
+        existing_items = workqueue.get_item_by_reference(cpr, status=WorkItemStatus.COMPLETED)
+        bevilget_emne = "BEVILGET - Midlertidigt ophold på Lysningen"
+        cutoff = datetime.now() - timedelta(days=2)
+        if any(
+            item.data.get("aktivitets_emne") == bevilget_emne and item.created_at >= cutoff
+            for item in existing_items
+        ):
+            logger.info(f"Skipping CPR {cpr}: already in queue with bevilget within 2 days")
+            continue
         data = {
             "aktivitets_id": opgave["id"],
             "cpr": cpr,
