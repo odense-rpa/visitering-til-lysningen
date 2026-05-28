@@ -5,7 +5,7 @@ forløb_til_indsats = [
     },
     {
         "Skemanavn": "Indstilling og afgørelse til midlertidigt ophold på Lysningen - Servicelov",
-        "Forløb": "Sag SOFF: Afløsning eller aflastning til ægtefælle, forældre m.v. og midlertidigt ophold – Ældre",
+        "Forløb": "Sag SOFF: Afløsning eller aflastning til ægtefælle, forældre m.v. og midlertidigt ophold - Ældre",
     },
 ]
 

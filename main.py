@@ -20,6 +20,8 @@ from process.nexus import (
     tilføj_borger_til_organisationer,
     tilføj_indsatser,
     luk_afvist_opgave,
+    opret_opgaver,
+    tilføj_forløb,
 )
 from kmd_nexus_client import NexusClientManager
 
@@ -48,7 +50,7 @@ async def populate_queue(workqueue: Workqueue):
 
     for opgave in opgaver + opgaver_afvist:
         cpr = opgave["patients"][0]["patientIdentifier"]["identifier"]
-        workqueue.get_item_by_reference(cpr)
+        test = workqueue.get_item_by_reference(cpr)
         # TODO: find ud hvordan vi tjekker om CPR er i køen indenfor 2 dage med bevilget - hvis ja så skip
         data = {
             "aktivitets_id": opgave["id"],
@@ -93,18 +95,18 @@ async def process_workqueue(workqueue: Workqueue):
                     )
 
                 # finder et match mellem borgers orgs og potentielle orgs og tjekker om der allerede er en opgave for borger i den organisation med samme startdato som i dag, hvis ikke så oprettes en opgave for hver matchende org
-                # opret_opgaver(
-                #     nexus,
-                #     skema,
-                #     borgers_orgs,
-                #     potentielle_organisationer,
-                #     data["aktivitets_emne"],
-                #     borger_bevilliget,
-                # )
+                opret_opgaver(
+                    nexus,
+                    skema,
+                    borgers_orgs,
+                    potentielle_organisationer,
+                    data["aktivitets_emne"],
+                    borger_bevilliget,
+                )
 
                 # tilføjer forløb til borger
-                # if borger_bevilliget:
-                #     tilføj_forløb(nexus, borger, skema)
+                if borger_bevilliget:
+                    tilføj_forløb(nexus, borger, skema)
 
                 # tilføjer indsatser til borger
                 if borger_bevilliget:
