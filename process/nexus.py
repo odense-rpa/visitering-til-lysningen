@@ -38,12 +38,20 @@ def hent_skema_og_bevillingsindsats(nexus: NexusClientManager, borger, cpr):
         )
     skemareference = max(skemareferencer, key=lambda s: s["Dato"])
     skema = nexus.skemaer.hent_skema_fra_reference(skemareference)
-    bevillingsindsats = next(
-        c
-        for item in skema["items"]
-        for c in item.get("children", [])
-        if c.get("label") == "Bevillingsindsats"
-    )["value"]["name"]
+    bevillingsindsats_felt = next(
+        (
+            c
+            for item in skema["items"]
+            for c in item.get("children", [])
+            if c.get("label") == "Bevillingsindsats"
+        ),
+        None,
+    )
+    bevillingsindsats = (
+        bevillingsindsats_felt["value"]["name"]
+        if bevillingsindsats_felt and bevillingsindsats_felt.get("value")
+        else None
+    )
     return skema, bevillingsindsats
 
 
@@ -137,12 +145,10 @@ def tilføj_indsatser(nexus: NexusClientManager, borger, skema, bevillingsindsat
             )
 
 
-def luk_afvist_opgave(nexus: NexusClientManager, aktivitets_id):
-    org = nexus.organisationer.hent_organisation_ved_navn("Robot afvist Lysningen")
-    opgaver = nexus.opgaver.hent_opgaver(org)
-    opgave = next((o for o in opgaver if o["id"] == aktivitets_id), None)
+def luk_afvist_opgave(nexus: NexusClientManager, aktivitets_id, borger):
+    opgave = nexus.opgaver.hent_opgave_for_borger(borger, aktivitets_id)
     if opgave:
-        nexus.opgaver.luk_opgave(opgave["id"])
+        nexus.opgaver.luk_opgave(opgave)
 
 
 def tilføj_forløb(nexus: NexusClientManager, borger, skema):

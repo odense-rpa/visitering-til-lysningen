@@ -121,7 +121,7 @@ async def process_workqueue(workqueue: Workqueue):
                     tilføj_indsatser(nexus, borger, skema, bevillingsindsats)
 
                 if not borger_bevilliget:
-                    luk_afvist_opgave(nexus, data["aktivitets_id"])
+                    luk_afvist_opgave(nexus, data["aktivitets_id"], borger)
 
                 tracker.track_task(process_name=proces_navn)
 
