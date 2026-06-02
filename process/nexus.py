@@ -75,7 +75,7 @@ def tilføj_indsatser(nexus: NexusClientManager, borger, skema, bevillingsindsat
     )
 
     if not er_ÆL_indsats(bevillingsindsats):
-        i_dag = datetime.date.today()
+        i_dag = datetime.datetime.today()
         opstarts_felter = {
             k: i_dag
             for k in (
@@ -96,7 +96,7 @@ def tilføj_indsatser(nexus: NexusClientManager, borger, skema, bevillingsindsat
                 "Aften - Indtagelse af mad og drikke (tidsafgrænset rehabiliteringsforløb)",
             ),
         ]:
-            if not any(i for i in filtrerede if i["name"] == check_navn):
+            if not any(i for i in filtrerede if i["name"] in (check_navn, indsats_navn)):
                 nexus.indsatser.opret_indsats(
                     borger=borger,
                     grundforløb="Ældre og sundhedsfagligt grundforløb",
